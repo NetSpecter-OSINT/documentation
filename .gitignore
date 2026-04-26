@@ -1,0 +1,6 @@
+docs/-contributing.md
+docs/-deployments.md
+
+docs/.vitepress/dist
+docs/.vitepress/cache
+node_modules
