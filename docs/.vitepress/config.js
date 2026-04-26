@@ -9,7 +9,7 @@ export default defineConfig({
 
   // ---- Base URL ----
   // Change to '/' if using a custom domain like docs.netspecter.io
-  base: '/docs/',
+  base: '/documentation/',
 
   // ---- Head tags - SEO ----
   head: [
