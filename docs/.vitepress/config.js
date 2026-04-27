@@ -21,6 +21,9 @@ export default defineConfig({
     ['meta', { property: 'og:image', content: 'https://netspecter-osint.github.io/documentation/logo.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['link', { rel: 'icon', type: 'image/png', href: '/docs/logo.png' }],
+    ['link', { rel: 'icon', type: 'image/x-icon', href: '/documentation/favicon.ico' }],
+
+    
   ],
 
   // ---- Theme config ----
