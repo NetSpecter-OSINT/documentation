@@ -84,11 +84,25 @@ DKIM adds a cryptographic signature to outgoing emails. The sending mail server 
 
 **How DKIM selectors work:**
 
-DKIM records are published under subdomain patterns like `selector._domainkey.example.com`. Because the selector name can be anything the domain owner chooses, NetSpecter probes ten commonly used selector names:
+DKIM records are published under subdomain patterns like `selector._domainkey.example.com`. Because the selector name can be anything the domain owner chooses, NetSpecter probes 48 commonly used selector names:
 
 ```
-default, google, mail, dkim, k1,
-s1, s2, selector1, selector2, protonmail
+Google Workspace:   google, google2, googledomains
+Microsoft 365:      selector1, selector2
+Mailchimp/Mandrill: k1, k2, k3, mandrill
+SendGrid:           s1, s2, smtpapi, em, sg
+Amazon SES:         amazonses
+Mailgun:            mailo, pic, mta, mx
+Proofpoint:         proofpoint, pp1, pp2
+Mimecast:           mc1, mc2
+HubSpot:            hubspot1, hubspot2, hs1, hs2
+Postmark:           pm
+Zendesk:            zendesk1, zendesk2
+Salesforce:         sfdc, sf1
+Zoho:               zoho, zmail
+Fastmail:           fm1, fm2, fm3
+ProtonMail:         protonmail
+Generic/fallback:   default, mail, email, dkim, dkim1, dkim2, key1, key2, smtp
 ```
 
 If any of these resolve to a TXT record containing a DKIM public key, DKIM is confirmed as configured for at least one mail stream. Not finding a common selector does not definitively mean DKIM is absent — the domain may use a non-standard selector name that NetSpecter does not probe.
@@ -289,7 +303,7 @@ SPF authorises SendGrid — a legitimate email marketing platform. DKIM is prese
 
 ## Limitations
 
-- **DKIM selector coverage** — NetSpecter probes ten common selector names. A domain using a non-standard or randomly generated selector (common with some email platforms) may show no DKIM found even if DKIM is correctly configured. A negative result should be treated as inconclusive rather than definitive.
+- **DKIM selector coverage** — NetSpecter probes 48 common selector names, covering the most widely used mail providers and generic fallbacks. A domain using a non-standard or randomly generated selector (common with some email platforms) may show no DKIM found even if DKIM is correctly configured. A negative result should be treated as inconclusive rather than definitive.
 - **SPF lookup limits** — SPF records that chain many `include:` directives can hit the DNS lookup limit of ten. Records with more than ten lookups will cause SPF to fail in practice even if the record looks syntactically correct.
 - **DMARC p=none** — a DMARC record with `p=none` is technically present but provides no enforcement. NetSpecter displays the policy so you can assess the actual protection level rather than just presence or absence.
 - **Shared MX infrastructure** — some email security vendors (Mimecast, Proofpoint, Barracuda) sit in front of the destination mail server as a filtering layer. Their presence in MX records does not mean email is hosted with them — they are a relay that forwards to the actual mailbox provider.
@@ -298,7 +312,7 @@ SPF authorises SendGrid — a legitimate email marketing platform. DKIM is prese
 
 ## API used
 
-All email security checks use [Google Public DNS over HTTPS](https://developers.google.com/speed/public-dns/docs/doh). TXT records are queried for SPF and DMARC. Ten DKIM selector subdomains are queried individually. MX records are queried to confirm email receiving capability.
+All email security checks use [Google Public DNS over HTTPS](https://developers.google.com/speed/public-dns/docs/doh). TXT records are queried for SPF and DMARC. 48 DKIM selector subdomains are queried individually, covering major mail providers and common generic names. MX records are queried to confirm email receiving capability.
 
 No API key is required. There are no meaningful rate limits for normal use.
 
