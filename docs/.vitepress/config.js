@@ -6,7 +6,7 @@ export default defineConfig({
   description: 'Free browser based OSINT and passive recon tool. DNS, WHOIS, SSL, subdomains, ports, tech fingerprinting, no need to install anything, no API keys.',
   lang: 'en-GB',
   sitemap: {
-    hostname: 'https://netspecter-osint.github.io'
+    hostname: 'https://netspecter-osint.github.io/documentation/'
   },
   appearance: 'light',
 
