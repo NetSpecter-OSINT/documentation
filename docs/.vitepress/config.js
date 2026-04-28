@@ -5,6 +5,9 @@ export default defineConfig({
   title: 'NetSpecter',
   description: 'Free browser based OSINT and passive recon tool. DNS, WHOIS, SSL, subdomains, ports, tech fingerprinting, no need to install anything, no API keys.',
   lang: 'en-GB',
+  sitemap: {
+    hostname: 'https://netspecter-osint.github.io'
+  },
   appearance: 'light',
 
   // ---- Base URL ----
@@ -13,17 +16,19 @@ export default defineConfig({
 
   // ---- Head tags - SEO ----
   head: [
+    ['meta', { name: 'google-site-verification', content: 'tv-KIgtCqJjsIIUJWPUxnVSvnQ9tONfiFutrqnm8kjs' }],
     ['meta', { name: 'theme-color', content: '#00ff41' }],
     ['meta', { name: 'author', content: 'NetSpecter' }],
     ['meta', { name: 'keywords', content: 'osint, recon, dns lookup, whois, subdomain finder, ssl checker, passive recon, network intelligence, free security tool' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'NetSpecter Docs' }],
     ['meta', { property: 'og:image', content: 'https://netspecter-osint.github.io/documentation/logo.png' }],
+    ['meta', { name: 'twitter:image', content: 'https://netspecter-osint.github.io/documentation/logo.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
-    ['link', { rel: 'icon', type: 'image/png', href: '/docs/logo.png' }],
+    ['link', { rel: 'icon', type: 'image/png', href: '/documentation/logo.png' }],
     ['link', { rel: 'icon', type: 'image/x-icon', href: '/documentation/favicon.ico' }],
-
     
+        
   ],
 
   // ---- Theme config ----
@@ -41,7 +46,7 @@ export default defineConfig({
       {
         text: 'Links',
         items: [
-          { text: 'Launch Tool',    link: 'https://netspecter-osint.github.io/NetSpecter/' },
+          { text: 'Launch NetSpecter',    link: 'https://netspecter-osint.github.io/NetSpecter/' },
           { text: 'GitHub',         link: 'https://github.com/netspecter-osint/Netspecter' },
           { text: 'Support on Ko-fi', link: 'https://ko-fi.com/wabbuwabbu' },
         ]
