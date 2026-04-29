@@ -17,7 +17,7 @@ Use SSL / Certificates when you want to:
 
 - Verify that a domain has a valid, non-expired certificate
 - Review the full certificate history for a domain including past and wildcard certificates
-- Check which certificate authority issued the certificate
+- Check whether any certificates have been revoked
 - Identify subdomains revealed through certificate transparency logs
 - Grade the TLS configuration of a web server
 - Detect known TLS vulnerabilities such as Heartbleed, POODLE, or BEAST
@@ -30,7 +30,7 @@ Use SSL / Certificates when you want to:
 - A security team is auditing a third-party service and needs to verify their TLS posture
 - An IT administrator wants to check certificate expiry dates across their infrastructure
 - A researcher is mapping the subdomain footprint of an organisation through certificate transparency logs
-- Someone is investigating a suspicious site and wants to know who issued its certificate and when
+- Someone is investigating a suspicious site and wants to know when its certificate was issued and whether it has been revoked
 
 ---
 
@@ -48,7 +48,7 @@ NetSpecter queries [Certspotter](https://sslmate.com/certspotter/) to retrieve a
 
 [SSL Labs](https://www.ssllabs.com/) by Qualys runs an active scan against the target domain's HTTPS endpoint and produces a comprehensive grade based on the quality of the TLS configuration. This includes protocol versions supported, cipher strength, certificate validity, vulnerability status, and security header presence.
 
-First-time scans take 30 to 60 seconds. Subsequent scans return cached results from the previous 24 hours almost instantly. NetSpecter polls for the result automatically and displays it when ready.
+If a cached result from the past 24 hours is available, it renders immediately. For first-time scans, NetSpecter provides a direct link to the live SSL Labs report where you can follow progress in real time. Results remain cached for 24 hours once complete.
 
 ---
 
@@ -62,7 +62,7 @@ Each certificate entry shows:
 |---|---|
 | Common Name | The primary domain the certificate was issued for |
 | Status | `VALID` if the certificate has not expired, `EXPIRED` if it has |
-| Issuer | The certificate authority that issued the certificate |
+| Revoked | Whether the certificate has been revoked by its CA |
 | Valid | The start and end dates of the certificate's validity window |
 | SANs | Subject Alternative Names — all domains covered by this certificate |
 
@@ -70,23 +70,12 @@ Each certificate entry shows:
 
 ```
 [01] *.example.com                              VALID
-     Issuer     Let's Encrypt
+     Revoked    NO
      Valid      2026-03-11 → 2026-06-09
      SANs       *.example.com | example.com
 ```
 
-This is a wildcard certificate (`*.example.com`) issued by Let's Encrypt covering both the apex domain and all subdomains. It is valid for 90 days, which is standard for Let's Encrypt certificates.
-
-**What the issuer tells you:**
-
-| Issuer | Notes |
-|---|---|
-| Let's Encrypt | Free, automated, 90-day certificates — extremely common for legitimate sites |
-| ZeroSSL | Another free automated CA — similar to Let's Encrypt |
-| Sectigo / Comodo | Commercial CA — paid certificates, common for businesses |
-| DigiCert | Enterprise-grade CA — common for large organisations and financial services |
-| GlobalSign | Enterprise CA — similar to DigiCert |
-| Self-signed | No trusted CA — browser will show a security warning |
+This is a wildcard certificate (`*.example.com`) covering both the apex domain and all subdomains. It is valid for 90 days, which is standard for Let's Encrypt certificates, and has not been revoked.
 
 ---
 
@@ -150,19 +139,19 @@ Total CT entries    2
 Showing             2
 
 [01] *.p4mdev.com                               VALID
-     Issuer     N/A
+     Revoked    NO
      Valid      2026-03-11 → 2026-06-09
      SANs       *.p4mdev.com | p4mdev.com
 
 [02] *.p4mdev.com                               VALID
-     Issuer     N/A
+     Revoked    NO
      Valid      2026-03-11 → 2026-06-09
      SANs       *.p4mdev.com | p4mdev.com
 ```
 
 Two identical entries for the same validity window — the same certificate was logged to two CT logs on the same day the domain was registered. This is consistent with automated, same-day certificate provisioning.
 
-**SSL Labs section:**
+**SSL Labs section (cached result):**
 
 ```
 Overall Grade       A
@@ -181,6 +170,16 @@ Endpoint [1]
 
 Grade A with TLS 1.3 support, forward secrecy, HSTS in place, and no known vulnerabilities. This is a well-configured server.
 
+**SSL Labs section (first-time scan):**
+
+```
+Assessment in progress. Results are available for 24 hours once complete.
+
+View live progress: Open SSL Labs report →
+```
+
+No cached result was available. The assessment has been queued on SSL Labs — follow the link to track progress in real time. Once complete, the next scan of the same domain will render the full grade inline.
+
 ---
 
 ## Investigative signals to look for
@@ -190,7 +189,7 @@ Grade A with TLS 1.3 support, forward secrecy, HSTS in place, and no known vulne
 | Certificate issued on the same day as domain registration | Automated, rapid deployment — consistent with disposable infrastructure |
 | Only one or two CT log entries | Domain is newly created or rarely renewed |
 | Dozens of entries over several years | Established domain with a long certificate history |
-| Self-signed certificate (no trusted issuer) | Browser will warn users — unusual for a public-facing site |
+| Revoked certificate | Certificate was invalidated by its CA before expiry — may indicate a compromise or administrative action |
 | Expired certificate still in CT logs | Server may be improperly maintained or abandoned |
 | Grade B or below | Outdated TLS configuration — older protocol versions still enabled |
 | Grade F | Serious vulnerability or broken HTTPS — do not trust the connection |
@@ -209,7 +208,7 @@ A developer has just deployed a new web application and wants to confirm the cer
 
 ```
 [01] app.example.com                            VALID
-     Issuer     Let's Encrypt
+     Revoked    NO
      Valid      2026-04-01 → 2026-06-30
 
 Overall Grade   A
@@ -218,7 +217,7 @@ HSTS            PRESENT
 Heartbleed      SAFE
 ```
 
-Certificate is valid, issued by Let's Encrypt, 90-day window as expected. Grade A with HSTS and forward secrecy. Ready to launch.
+Certificate is valid, not revoked, 90-day window as expected. Grade A with HSTS and forward secrecy. Ready to launch.
 
 ---
 
@@ -265,7 +264,9 @@ Total CT entries    2
 Showing             2
 
 [01] *.phishing-site.com    VALID    2026-04-20 → 2026-07-19
+     Revoked    NO
 [02] *.phishing-site.com    VALID    2026-04-20 → 2026-07-19
+     Revoked    NO
 ```
 
 Only two entries, both from the same day, both identical. The domain has no certificate history before this week. Combined with a WHOIS creation date of the same week, this is consistent with freshly deployed infrastructure.
@@ -278,6 +279,7 @@ An IT administrator runs SSL checks across several internal domains and finds:
 
 ```
 [01] old-service.company.com    EXPIRED
+     Revoked    NO
      Valid      2024-11-01 → 2025-01-30
 ```
 
@@ -287,7 +289,7 @@ An expired certificate that was never renewed — the service was likely decommi
 
 ## Limitations
 
-- **SSL Labs scan timing** — first-time scans take 30 to 60 seconds. If the domain has not been scanned recently, NetSpecter will poll automatically. Very occasionally scans time out on the first attempt — running the module again will return the cached result immediately.
+- **SSL Labs scan timing** — first-time scans are assessed live by SSL Labs and can take 30 to 60 seconds. NetSpecter links directly to the live report rather than waiting — follow the link to track progress. Once complete, results are cached for 24 hours and will render inline on subsequent scans.
 - **Cloudflare and CDN proxies** — SSL Labs scans the edge certificate presented by the CDN, not the origin server's certificate. The grade reflects the CDN's TLS configuration.
 - **Certspotter free tier** — the free Certspotter API has rate limits. If you see no CT results for a well-established domain, try again after a few minutes.
 - **Internal or private domains** — domains that do not resolve publicly will not have CT log entries and SSL Labs cannot scan them.
@@ -302,7 +304,7 @@ An expired certificate that was never renewed — the service was likely decommi
 https://api.certspotter.com/v1/issuances?domain={domain}&include_subdomains=false&expand=dns_names
 ```
 
-**TLS grading:** [SSL Labs API v3](https://www.ssllabs.com/projects/ssllabs-apis/) by Qualys. No API key required. Results are cached for 24 hours. Qualys asks that automated tools be respectful of their API — NetSpecter polls at 10-second intervals and makes a maximum of six polling attempts per scan.
+**TLS grading:** [SSL Labs API v3](https://www.ssllabs.com/projects/ssllabs-apis/) by Qualys. No API key required. Results are cached for 24 hours.
 
 ```
 https://api.ssllabs.com/api/v3/analyze?host={domain}&fromCache=on&maxAge=24

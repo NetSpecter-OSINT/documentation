@@ -82,16 +82,6 @@ URLScan is particularly useful for investigating suspicious links before clickin
 
 ---
 
-### GreyNoise
-
-[GreyNoise](https://viz.greynoise.io/) distinguishes between background internet noise — automated scanners, crawlers, and research tools — and genuinely targeted malicious traffic. It classifies IP addresses as benign, malicious, or unknown based on observed behaviour.
-
-An IP that GreyNoise classifies as a known scanner or crawler is less concerning than one with no classification or one flagged as malicious. If an IP is hitting your infrastructure, GreyNoise can tell you whether it is part of routine internet background noise or something more targeted.
-
-**Best for:** Distinguishing automated scanning from targeted attacks, understanding whether an IP is a known research tool or a genuine threat.
-
----
-
 ### AlienVault OTX
 
 [AlienVault OTX](https://otx.alienvault.com/) (Open Threat Exchange) is a community-driven threat intelligence platform. Analysts contribute indicators of compromise (IoCs) grouped into pulses — collections of related threat data for a specific campaign or threat actor. Searching for a domain or IP shows whether it appears in any published pulses.
@@ -152,7 +142,6 @@ Resolved IP      93.184.216.34
 [LINK] Shodan              https://www.shodan.io/search?query=example.com
 [LINK] AbuseIPDB           https://www.abuseipdb.com/check/93.184.216.34
 [LINK] URLScan.io          https://urlscan.io/search/#page.domain%3Aexample.com
-[LINK] GreyNoise           https://viz.greynoise.io/ip/93.184.216.34
 [LINK] AlienVault OTX      https://otx.alienvault.com/indicator/domain/example.com
 [LINK] IBM X-Force         https://exchange.xforce.ibmcloud.com/url/example.com
 [LINK] MXToolbox Blacklist https://mxtoolbox.com/blacklists.aspx?hostname=example.com
@@ -160,7 +149,7 @@ Resolved IP      93.184.216.34
 [LINK] URLHaus             https://urlhaus.abuse.ch/browse.php?search=example.com
 ```
 
-Notice that domain-focused platforms (VirusTotal, URLScan, OTX, X-Force) receive the domain name, while IP-focused platforms (AbuseIPDB, GreyNoise) receive the resolved IP address. This ensures each platform receives the most relevant identifier for its data model.
+Notice that domain-focused platforms (VirusTotal, URLScan, OTX, X-Force) receive the domain name, while IP-focused platforms (AbuseIPDB) receive the resolved IP address. This ensures each platform receives the most relevant identifier for its data model.
 
 ---
 
@@ -177,13 +166,10 @@ If the domain is new or has low VirusTotal detections, URLScan lets you see what
 **Step 3 — Check AbuseIPDB for the resolved IP**
 Particularly relevant if the domain is not behind a CDN — you get a direct read on whether the hosting IP has been reported for abuse.
 
-**Step 4 — Check GreyNoise for the IP**
-Understand whether the IP is part of background internet noise or something more targeted.
-
-**Step 5 — Check OTX for campaign context**
+**Step 4 — Check OTX for campaign context**
 If earlier steps found something suspicious, OTX tells you whether this indicator is part of a known campaign and gives you related IoCs to investigate.
 
-**Step 6 — Check MXToolbox if email is involved**
+**Step 5 — Check MXToolbox if email is involved**
 If the domain is used for email, blacklist status directly affects deliverability and tells you whether the sending IP has been reported for spam.
 
 ---
@@ -199,7 +185,6 @@ All ten platforms offer free access without an account for basic lookups. Howeve
 | AbuseIPDB | Higher rate limits, API access, abuse reporting |
 | Shodan | More search results, filters, saved queries |
 | OTX | Create and subscribe to threat pulses |
-| GreyNoise | More scan detail, API access |
 
 ---
 
@@ -212,7 +197,6 @@ A SOC analyst receives an alert for outbound connections from an internal workst
 - VirusTotal shows 3/91 detections categorised as malware
 - AbuseIPDB shows the IP has been reported 47 times for C2 communication
 - OTX shows the domain appears in a published pulse for a known RAT campaign
-- GreyNoise shows the IP is not a known scanner — it is targeted traffic
 
 Three independent platforms have flagged the same indicator. The analyst escalates to incident response with high confidence.
 
@@ -238,7 +222,6 @@ A developer is considering integrating a third-party API into their application.
 - VirusTotal: 0 detections, domain registered 4 years ago
 - AbuseIPDB: 0 reports on the IP
 - MXToolbox: Not listed on any blacklists
-- GreyNoise: IP not classified as malicious
 - URLScan: Multiple historical scans of the domain, all showing a legitimate API documentation site
 
 All clear across the platforms checked. The developer proceeds with the integration with confidence.
@@ -261,7 +244,7 @@ The sending IP has been listed due to volume. The manager contacts their email s
 - **NetSpecter does not fetch threat data directly** — all ten platforms are accessed via links that open in your browser. NetSpecter itself does not retrieve or display the threat intelligence data.
 - **Platform coverage gaps** — no single platform sees everything. A clean result on one platform does not guarantee the domain is safe. Running multiple platforms in combination gives a more complete picture.
 - **New domains and zero-day threats** — very recently registered domains and newly deployed phishing infrastructure often have no reputation data yet. A clean reputation can simply mean the domain has not yet been analysed.
-- **CDN IP addresses** — for Cloudflare-proxied domains, the resolved IP belongs to Cloudflare's shared infrastructure. AbuseIPDB and GreyNoise results for Cloudflare IPs reflect the CDN infrastructure, not the specific domain being investigated. Domain-based queries (VirusTotal, URLScan, OTX) are more relevant for proxied targets.
+- **CDN IP addresses** — for Cloudflare-proxied domains, the resolved IP belongs to Cloudflare's shared infrastructure. AbuseIPDB results for Cloudflare IPs reflect the CDN infrastructure, not the specific domain being investigated. Domain-based queries (VirusTotal, URLScan, OTX) are more relevant for proxied targets.
 - **Account rate limits** — without an account, some platforms limit the number of lookups per day. For high-volume investigations, free accounts on the key platforms are recommended.
 
 ---
