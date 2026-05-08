@@ -5,9 +5,9 @@ description: How NetSpecter's subdomain discovery module works, what subdomains 
 
 # Subdomain Discovery
 
-The Subdomain Discovery module passively enumerates subdomains associated with a target domain. Subdomains reveal the internal structure of an organisation's infrastructure — the services they run, the platforms they use, and sometimes systems that were meant to stay out of public view.
+The Subdomain Discovery module passively enumerates subdomains associated with a target domain, then probes each one to check whether it is live. Subdomains reveal the internal structure of an organisation's infrastructure — the services they run, the platforms they use, and sometimes systems that were meant to stay out of public view.
 
-Unlike active subdomain brute-forcing, which hammers a DNS server with thousands of guesses, NetSpecter uses entirely passive sources. No requests are made to the target's servers and no unusual traffic is generated against their infrastructure.
+Unlike active subdomain brute-forcing, which hammers a DNS server with thousands of guesses, NetSpecter uses entirely passive sources. No requests are made to the target's servers during enumeration, and no unusual traffic is generated against their infrastructure.
 
 ---
 
@@ -19,6 +19,7 @@ Use Subdomain Discovery when you want to:
 - Find services such as APIs, admin panels, staging environments, and mail servers
 - Identify platforms and tools an organisation uses through subdomain naming conventions
 - Discover subdomains that may have been forgotten or left unmaintained
+- Verify which discovered subdomains are currently live and reachable
 - Cross-reference with CT log data to understand how long certain services have existed
 - Supplement findings from the DNS and Tech Fingerprint modules
 
@@ -34,9 +35,13 @@ Use Subdomain Discovery when you want to:
 
 ## How it works
 
-NetSpecter uses two passive sources in parallel and combines the results.
+NetSpecter runs in two phases: passive enumeration followed by live status probing.
 
-**Source 1 — Certspotter certificate transparency logs**
+### Phase 1 — Passive enumeration
+
+Two sources are queried in parallel and their results are merged and deduplicated. Each result is tagged with which source(s) found it.
+
+**Source 1 — Certspotter certificate transparency logs** `[CERT]`
 
 Every TLS certificate issued for a domain must be logged in a public certificate transparency log. When an organisation issues a certificate for `api.example.com` or `staging.example.com`, that subdomain is permanently recorded in the CT logs regardless of whether the service is still running.
 
@@ -44,23 +49,25 @@ NetSpecter queries the Certspotter API to retrieve all certificate issuances for
 
 This source is particularly powerful for finding subdomains that were once active but have since been removed — they may still appear in CT logs from years ago, giving you historical visibility that DNS alone cannot provide.
 
-**Source 2 — Common subdomain DNS probe**
+**Source 2 — crt.sh certificate transparency aggregator** `[CRT]`
 
-NetSpecter probes a curated list of 35 common subdomain prefixes directly against DNS. Each prefix is checked for a live A record. Any that resolve to an IP address are added to the results, even if they have no corresponding certificate log entry.
+crt.sh is a public CT log search engine maintained by Sectigo that aggregates certificate data across multiple log providers. It often has broader coverage than any single CT log source, and can surface subdomains that Certspotter has not yet indexed.
 
-The probed prefixes include:
+NetSpecter queries the crt.sh JSON API for all certificate records matching the target domain. Each result's `name_value` field is parsed for hostnames, including entries that contain multiple names.
 
-```
-www, mail, email, smtp, pop, imap, ftp, sftp,
-api, dev, staging, test, beta, app, portal, admin,
-dashboard, blog, shop, store, cdn, media, static,
-assets, img, images, vpn, remote, mx, ns1, ns2,
-cpanel, whm, webmail, autodiscover, autoconfig
-```
+When a subdomain appears in both sources it is listed once with both `[CERT]` and `[CRT]` tags. A subdomain appearing in only one source is still a valid finding.
 
-This source catches actively running subdomains that may not have their own certificate — for example an internal mail server, a cPanel panel, or an autodiscover endpoint for email client configuration.
+### Phase 2 — Live status probe
 
-Both sources run simultaneously and their results are merged and deduplicated before display.
+Once enumeration is complete, NetSpecter probes every discovered subdomain via the NetSpecter proxy worker to check whether it is currently serving HTTP traffic. The probe attempts HTTPS first and falls back to HTTP if HTTPS is unavailable.
+
+For each subdomain the probe returns:
+
+- **HTTP status code** — whether the service responded and how
+- **Protocol** — whether it is served over HTTPS or HTTP
+- **Redirect destination** — where the subdomain redirects to, if applicable
+
+This phase adds live context to what are otherwise historical records. A subdomain in a CT log from three years ago may no longer exist — the probe tells you immediately whether it does.
 
 ---
 
@@ -103,41 +110,60 @@ The existence of these subdomains does not mean they are accessible — they may
 
 ### Historical subdomains from CT logs
 
-A subdomain appearing in certificate transparency logs does not necessarily mean it is still active. CT logs are permanent records — a subdomain that was live two years ago and then decommissioned will still appear in the results. This historical data can be useful for:
+A subdomain appearing in certificate transparency logs does not necessarily mean it is still active. CT logs are permanent records — a subdomain that was live two years ago and then decommissioned will still appear in the results. The live status probe will show these as `unreachable`, confirming they are no longer serving traffic. This historical data is still useful for:
 
 - Understanding how an organisation's infrastructure has evolved
 - Finding services that were once public but may now be internal
 - Identifying naming conventions the organisation uses
 
-To verify whether a historical subdomain is still live, you can manually query its DNS or attempt to connect to it.
+---
+
+### Reading HTTP status codes
+
+The live probe phase adds a status code to each subdomain. Understanding what each code means in context:
+
+| Status | Meaning |
+|---|---|
+| `200` | Service is live and responding normally |
+| `301` / `302` | Redirect — follow the destination to see where it leads |
+| `401` | Service is live but requires authentication |
+| `403` | Service is reachable but access is explicitly denied |
+| `404` | Server responded but no content found at that path |
+| `500` / `502` / `503` | Server is reachable but encountering errors |
+| `--  unreachable` | No response — subdomain may be decommissioned or DNS-only |
 
 ---
 
 ## Reading the output
 
 ```
-Source [1/2]: Certspotter CT logs...
-Certspotter returned 8 entries.
+Querying 2 passive sources in parallel...
 
-Source [2/2]: Common subdomain DNS probe...
-DNS probe found 3 additional subdomains.
+  [1/2] Certspotter CT logs...
+  [2/2] crt.sh CT aggregator...
+  [1/2] Certspotter: done.
+  [2/2] crt.sh: done.
 
-Total subdomains found    11
+Total unique subdomains    9
 
-[001] api.example.com
-[002] autoconfig.example.com
-[003] autodiscover.example.com
-[004] blog.example.com
-[005] dev.example.com
-[006] mail.example.com
-[007] smtp.example.com
-[008] staging.example.com
-[009] static.example.com
-[010] www.example.com
-[011] example.com
+  [001] files.example.com          [CRT]
+  [002] files1.example.com         [CERT] [CRT]
+  [003] api.example.com            [CERT] [CRT]
+  [004] staging.example.com        [CERT]
+  [005] www.example.com            [CERT] [CRT]
+  [006] example.com                [CERT] [CRT]
+
+Probing live HTTP status via worker...
+
+  [001] files.example.com          --   unreachable
+  [002] files1.example.com         401  HTTPS
+  [003] api.example.com            200  HTTPS
+  [004] staging.example.com        403  HTTPS
+  [005] www.example.com            200  HTTPS
+  [006] example.com                301  → https://www.example.com/
 ```
 
-Results are sorted alphabetically. The apex domain itself is included when found in CT logs.
+Results are sorted alphabetically. The apex domain itself is included when found in CT logs. Source tags show which CT source(s) discovered each subdomain.
 
 ---
 
@@ -150,9 +176,13 @@ Results are sorted alphabetically. The apex domain itself is included when found
 | `api` subdomain | Backend service — may expose endpoints not visible on the main site |
 | `cpanel` or `whm` subdomain | Shared hosting control panel — indicates budget hosting infrastructure |
 | `vpn` or `remote` subdomain | Remote access infrastructure |
+| Subdomain returning `401` | Live service requiring authentication — worth investigating what it hosts |
+| Subdomain returning `403` | Server is reachable but actively denying access |
+| Subdomain redirecting to an unexpected domain | Possible misconfiguration, third-party platform, or subdomain takeover risk |
+| HTTP-only subdomain (no HTTPS fallback) | Older or poorly maintained service |
 | Very few subdomains on a supposedly large organisation | Possibly hiding infrastructure through different domain names |
 | Many subdomains on a recently registered domain | Rapid infrastructure deployment — worth investigating each service |
-| Subdomains that no longer resolve to DNS | Historical services that have been decommissioned |
+| Subdomains showing `unreachable` | Decommissioned services with stale CT log entries — DNS records may need cleaning |
 
 ---
 
@@ -163,22 +193,30 @@ Results are sorted alphabetically. The apex domain itself is included when found
 A bug bounty hunter is starting an engagement on a target with a well-defined scope. They run subdomain discovery to map what is available:
 
 ```
-Total subdomains found    23
+Total unique subdomains    8
 
-[001] api.target.com
-[002] api-v2.target.com
-[003] auth.target.com
-[004] beta.target.com
-[005] cdn.target.com
-[006] dashboard.target.com
-[007] dev.target.com
-[008] docs.target.com
-[009] staging.target.com
-[010] status.target.com
-...
+  [001] api.target.com             [CERT] [CRT]
+  [002] api-v2.target.com          [CRT]
+  [003] auth.target.com            [CERT] [CRT]
+  [004] beta.target.com            [CERT]
+  [005] dashboard.target.com       [CERT] [CRT]
+  [006] dev.target.com             [CERT]
+  [007] staging.target.com         [CERT] [CRT]
+  [008] www.target.com             [CERT] [CRT]
+
+Probing live HTTP status via worker...
+
+  [001] api.target.com             200  HTTPS
+  [002] api-v2.target.com          200  HTTPS
+  [003] auth.target.com            200  HTTPS
+  [004] beta.target.com            --   unreachable
+  [005] dashboard.target.com       401  HTTPS
+  [006] dev.target.com             200  HTTPS
+  [007] staging.target.com         200  HTTPS
+  [008] www.target.com             200  HTTPS
 ```
 
-Several interesting targets emerge immediately. `api.target.com` and `api-v2.target.com` suggest a versioned API with a legacy endpoint still running. `auth.target.com` is an authentication service — a high-value target. `dev.target.com` and `staging.target.com` are non-production environments that may have different security configurations. The hunter now has a clear map of where to focus their effort.
+Several interesting targets emerge immediately. `api.target.com` and `api-v2.target.com` are both live, suggesting a versioned API with a legacy endpoint still running. `auth.target.com` is a live authentication service — a high-value target. `dashboard.target.com` returns `401`, meaning an interface exists and is accessible but requires credentials. `dev.target.com` and `staging.target.com` are both live non-production environments. The hunter now has a clear map of where to focus their effort.
 
 ---
 
@@ -187,29 +225,18 @@ Several interesting targets emerge immediately. `api.target.com` and `api-v2.tar
 An IT administrator at a medium-sized company runs subdomain discovery on their own domain and discovers:
 
 ```
-[001] old-crm.company.com
-[002] legacy-portal.company.com
-[003] test2019.company.com
+  [001] old-crm.company.com        [CERT]
+  [002] legacy-portal.company.com  [CERT]
+  [003] test2019.company.com       [CERT]
+
+Probing live HTTP status via worker...
+
+  [001] old-crm.company.com        --   unreachable
+  [002] legacy-portal.company.com  200  HTTP
+  [003] test2019.company.com       200  HTTP
 ```
 
-None of these were in their current infrastructure inventory. `test2019.company.com` was a test environment from several years ago that was never decommissioned — it still has a live DNS record pointing to an old server. The administrator investigates and finds the server is still running an outdated version of a web application framework. It gets shut down and the DNS record is removed.
-
----
-
-### Understanding a competitor's technical footprint
-
-A product manager wants to understand what services a competitor runs to inform their own product roadmap. Running subdomain discovery reveals:
-
-```
-[001] api.competitor.com
-[002] app.competitor.com
-[003] docs.competitor.com
-[004] status.competitor.com
-[005] webhooks.competitor.com
-[006] www.competitor.com
-```
-
-The presence of `status.competitor.com` suggests they use a status page service. `webhooks.competitor.com` indicates they have a webhook integration feature. `docs.competitor.com` means they maintain separate developer documentation. All of this is publicly visible information that provides useful competitive context.
+None of these were in their current infrastructure inventory. `legacy-portal.company.com` and `test2019.company.com` are both live and serving over plain HTTP with no HTTPS — indicating old, unmaintained servers. `test2019.company.com` was a test environment from several years ago that was never properly decommissioned. The administrator investigates, finds an outdated application framework still running, shuts both servers down, and removes the DNS records.
 
 ---
 
@@ -218,39 +245,48 @@ The presence of `status.competitor.com` suggests they use a status page service.
 A researcher investigates a domain used in a suspicious communication. Subdomain discovery returns:
 
 ```
-Total subdomains found    3
+Total unique subdomains    3
 
-[001] api.suspicious-domain.com
-[002] webex.suspicious-domain.com
-[003] suspicious-domain.com
+  [001] api.suspicious-domain.com    [CERT]
+  [002] webex.suspicious-domain.com  [CERT]
+  [003] suspicious-domain.com        [CERT]
+
+Probing live HTTP status via worker...
+
+  [001] api.suspicious-domain.com    200  HTTPS
+  [002] webex.suspicious-domain.com  200  HTTPS
+  [003] suspicious-domain.com        301  → https://webex.suspicious-domain.com/
 ```
 
-Only three subdomains on a domain that claims to be a corporate platform used by thousands of employees. The `webex.` subdomain is particularly interesting — it suggests the domain is being used to impersonate a Webex meeting platform rather than being a genuine service. A real enterprise conferencing platform would have a far richer subdomain footprint.
+Only three subdomains on a domain that claims to be a corporate platform used by thousands of employees. The root domain redirects to `webex.suspicious-domain.com`, and the `webex.` subdomain is live. This suggests the domain is being used to impersonate a Webex meeting platform rather than being a genuine service. A real enterprise conferencing platform would have a far richer subdomain footprint.
 
 ---
 
 ## Limitations
 
-- **Passive sources only** — NetSpecter does not brute-force subdomains. Subdomains that have never had a certificate and do not match the 35 common prefixes will not be found. For comprehensive subdomain enumeration, active tools such as `amass` or `subfinder` are more thorough.
-- **CT log coverage** — not all certificates are indexed by all CT logs at the same speed. Very recently issued certificates may not appear immediately.
-- **Historical vs active** — CT log results include historical subdomains that may no longer be live. The DNS probe confirms active subdomains, but CT log entries should be verified manually if currency matters.
-- **Certspotter rate limits** — the free Certspotter API allows a limited number of requests per hour. If results show unexpectedly few entries for a well-established domain, try again after a few minutes.
-- **Wildcard certificates** — a wildcard certificate (`*.example.com`) does not reveal which specific subdomains exist. It only confirms the organisation uses a wildcard. The DNS probe is the primary tool for discovering actual subdomains in this case.
+- **Passive enumeration only** — NetSpecter does not brute-force subdomains. Subdomains that have never had a certificate issued will not be found through the CT log sources. For comprehensive active enumeration, tools such as `amass` or `subfinder` are more thorough.
+- **CT log coverage** — not all certificates are indexed at the same speed across providers. Very recently issued certificates may not appear immediately in either source.
+- **Historical vs active** — CT log results include subdomains that may no longer be live. The live probe phase identifies which are currently reachable, but `unreachable` does not always mean the subdomain is permanently gone — it may be temporarily down or restricted by IP.
+- **crt.sh availability** — crt.sh can be slow or temporarily unavailable under load. If it times out, Certspotter results are still returned and the probe still runs.
+- **Wildcard certificates** — a wildcard certificate (`*.example.com`) does not reveal which specific subdomains exist, only that the organisation uses a wildcard. CT log sources cannot enumerate individual subdomains from a wildcard entry.
+- **Probe accuracy** — the live status probe uses a `HEAD` request via the NetSpecter proxy worker. Some servers do not support `HEAD` and may return `405 Method Not Allowed` even when live. A `403` or `401` still confirms the subdomain is reachable.
 
 ---
 
 ## API used
 
-**Certificate transparency:** [Certspotter API](https://sslmate.com/certspotter/api/) by SSLMate. No API key required.
+**Certificate transparency (Certspotter):** [Certspotter API](https://sslmate.com/certspotter/api/) by SSLMate. No API key required.
 
 ```
 https://api.certspotter.com/v1/issuances?domain={domain}&include_subdomains=true&expand=dns_names
 ```
 
-**DNS probe:** [Google Public DNS over HTTPS](https://developers.google.com/speed/public-dns/docs/doh). No API key required. 35 common prefixes are probed in parallel.
+**Certificate transparency (crt.sh):** [crt.sh](https://crt.sh) by Sectigo. No API key required.
 
 ```
-https://dns.google/resolve?name={subdomain}&type=A
+https://crt.sh/?q=%.{domain}&output=json
 ```
+
+**Live status probe:** NetSpecter proxy worker. Routes `HEAD` requests to each discovered subdomain server-side to work around browser CORS restrictions. Results include HTTP status code, protocol, and redirect destination where applicable.
 
 See [API Rate Limits](/api-limits) for a full breakdown across all modules.
